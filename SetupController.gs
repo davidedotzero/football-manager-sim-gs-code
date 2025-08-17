@@ -217,14 +217,20 @@ function setupPlaySimSheet(ss){
 function setupGameStateSheet(ss) {
     const sheet = prepareSheet(ss, CONFIG.sheets.GAME_STATE);
     
+<<<<<<< HEAD
     sheet.getRange("A1:G8").clear(); 
     sheet.getRange("A1:G1").merge().setValue("🏈 GAME DASHBOARD 🏈").setHorizontalAlignment("center").setFontWeight("bold").setBackground(CONFIG.colors.HEADER_BG).setFontColor(CONFIG.colors.HEADER_FONT);
+=======
+    sheet.getRange("A1:J10").clear(); 
+    sheet.getRange("A1:J1").merge().setValue("🏈 GAME DASHBOARD 🏈").setHorizontalAlignment("center").setFontWeight("bold").setBackground(CONFIG.colors.HEADER_BG).setFontColor(CONFIG.colors.HEADER_FONT);
+>>>>>>> 66535536644aa4e5b61e2f16d87b599155caa48f
     sheet.getRange("A3:C3").setValues([["HOME", "SCORE", "TIMEOUTS"]]).setFontWeight("bold");
     sheet.getRange("A4:C4").setBackground("#e9effb");
     sheet.getRange("E3:G3").setValues([["AWAY", "SCORE", "TIMEOUTS"]]).setFontWeight("bold");
     sheet.getRange("E4:G4").setBackground("#fbe9e9");
     sheet.getRange("A6:F6").setValues([["POSSESSION", "BALL ON", "DOWN", "TO GO", "QUARTER", "GAME CLOCK"]]).setFontWeight("bold");
     sheet.getRange("A7:F7").setBackground("#efefef");
+<<<<<<< HEAD
 
     sheet.getRange("A9").setValue("📜 PLAY-BY-PLAY LOG").setFontWeight("bold");
     sheet.getRange("A10:G10").setValues([["Clock", "Poss", "Down", "To Go", "Ball On", "Play Call", "Result"]]).setFontWeight("bold");
@@ -274,3 +280,62 @@ function setupStrategySheet(ss) {
     sheet.getRange("A4:E10").setBorder(true, true, true, true, null, null, null, SpreadsheetApp.BorderStyle.SOLID);
     sheet.autoResizeColumns(1, 5);
 }
+=======
+
+    sheet.getRange("A100").setValue("--- Drive Trail Log ---");
+    sheet.hideRow(sheet.getRange("A100"));
+
+    setupVisualField(ss, sheet);
+
+    sheet.getRange("A13").setValue("📜 PLAY-BY-PLAY LOG").setFontWeight("bold");
+    sheet.getRange("A14:G14").setValues([["Clock", "Poss", "Down", "To Go", "Ball On", "Play Call", "Result"]]).setFontWeight("bold");
+
+    sheet.setFrozenRows(14);
+}
+
+/**
+ * [REVISED] This version now has a simplified, more robust ball marker rule.
+ */
+function setupVisualField(ss, sheet) {
+    const START_COL = 11;
+    const END_ZONE_WIDTH = 10;
+    const FIELD_WIDTH = 100;
+    const TOTAL_WIDTH = END_ZONE_WIDTH * 2 + FIELD_WIDTH;
+    
+    const awayEndZone = sheet.getRange(3, START_COL, 8, END_ZONE_WIDTH);
+    const playingField = sheet.getRange(3, START_COL + END_ZONE_WIDTH, 8, FIELD_WIDTH);
+    const homeEndZone = sheet.getRange(3, START_COL + END_ZONE_WIDTH + FIELD_WIDTH, 8, END_ZONE_WIDTH);
+    
+    sheet.getRange(2, START_COL, 1, TOTAL_WIDTH).merge().setValue("FIELD OF PLAY").setHorizontalAlignment("center").setFontWeight("bold");
+    sheet.setColumnWidths(START_COL, TOTAL_WIDTH, 15);
+
+    const numberMarkers = ["10", "20", "30", "40", "50", "40", "30", "20", "10"];
+    let markerColumn = START_COL + END_ZONE_WIDTH + 9;
+    numberMarkers.forEach(marker => {
+      sheet.getRange(11, markerColumn).setValue(marker).setHorizontalAlignment('center').setFontWeight('bold');
+      markerColumn += 10;
+    });
+
+    const awayTeamName = ss.getSheetByName(CONFIG.sheets.TEAMS).getRange("C3").getValue().toUpperCase();
+    const homeTeamName = ss.getSheetByName(CONFIG.sheets.TEAMS).getRange("C2").getValue().toUpperCase();
+    
+    sheet.getRange(4, START_COL + 2, 6, 1).merge().setValue(awayTeamName).setFontColor("#FFFFFF").setFontWeight("bold").setTextRotation(90).setHorizontalAlignment('center').setVerticalAlignment('middle');
+    sheet.getRange(4, START_COL + END_ZONE_WIDTH + FIELD_WIDTH + 2, 6, 1).merge().setValue(homeTeamName).setFontColor("#FFFFFF").setFontWeight("bold").setTextRotation(90).setHorizontalAlignment('center').setVerticalAlignment('middle');
+    
+    const fieldStartCol = START_COL + END_ZONE_WIDTH;
+    const driveLogRange = "$A$101:$A$150";
+    const lastPosFormula = `INDEX(${driveLogRange}, COUNTA(${driveLogRange}))`;
+  
+    const rules = [
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=TRUE").setBackground("null").setRanges([playingField]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=TRUE").setBackground(CONFIG.colors.AWAY_TEAM_BG).setRanges([awayEndZone]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=TRUE").setBackground(CONFIG.colors.HOME_TEAM_BG).setRanges([homeEndZone]).build(),
+      // SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=MOD(COLUMN(R[0]C[0]) - ${fieldStartCol}, 5) = 0`).setBackground("#a2d699").setRanges([playingField]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=COUNTIF(${driveLogRange}, COLUMN(R[0]C[0]) - ${fieldStartCol} + 1) > 0`).setBackground("#cccccc").setRanges([playingField]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=COLUMN(R[0]C[0]) - ${fieldStartCol} + 1 = ${lastPosFormula}`).setBackground(CONFIG.colors.BALL_MARKER).setRanges([playingField]).build()
+
+    ];
+    
+    sheet.setConditionalFormatRules(rules);
+}
+>>>>>>> 66535536644aa4e5b61e2f16d87b599155caa48f
