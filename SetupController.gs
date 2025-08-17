@@ -11,6 +11,9 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(SpreadsheetApp.getUi().createMenu('▶️ Run Game')
       .addItem('Run Next Play', 'runNextPlay')
+      .addItem('Simulate Next Quarter', 'simulateNextQuarter')
+      .addItem('Simulate Full Game (AUTO)', 'startSimulation')
+      .addItem('Cancel Simulation', 'deleteTriggers')
       .addItem('Reset Game', 'resetGame'))
     .addToUi();
 }
@@ -43,20 +46,22 @@ function setupInterfaceSheets() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     setupActiveLineupSheet(ss);
     setupPlaySimSheet(ss);
-    setupGameStateSheet(ss); 
+    setupGameStateSheet(ss);
+    setupGameLogSheet(ss);
+    setupStrategySheet(ss);
 }
 
 function prepareSheet(ss, sheetName) {
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) { sheet = ss.insertSheet(sheetName); }
   
-  const requiredCols = 110;
+  const requiredCols = 130;
   const currentCols = sheet.getMaxColumns();
   if (currentCols < requiredCols) {
     sheet.insertColumnsAfter(currentCols, requiredCols - currentCols);
   }
 
-  sheet.getRange("A1:DF500").clear({contentsOnly: true, formatOnly: true, validationsOnly: true});
+  sheet.getRange("A1:DU500").clear({contentsOnly: true, formatOnly: true, validationsOnly: true});
   sheet.setFrozenRows(0);
   sheet.setFrozenColumns(0);
   Utilities.sleep(100);
@@ -184,82 +189,88 @@ function setupActiveLineupSheet(ss) {
     sheet.autoResizeColumns(1, 6);
 }
 
+/**
+ * [REVISED] Adds new play calls and the new score fields to the state.
+ */
 function setupPlaySimSheet(ss){
   const sheet = prepareSheet(ss, CONFIG.sheets.PLAY_SIM);
   sheet.setFrozenRows(1);
   sheet.getRange("A1:B1").setValues([["Offense Playcall", "Defense Playcall"]]).setBackground(CONFIG.colors.HEADER_BG).setFontColor(CONFIG.colors.HEADER_FONT).setFontWeight("bold");
-  const offensePlays=["Inside Run", "Outside Run", "Short Pass", "Deep Pass"];
+  
+  // [NEW] Added Field Goal and Punt
+  const offensePlays=["Inside Run", "Outside Run", "Short Pass", "Deep Pass", "Field Goal", "Punt"];
   sheet.getRange("A2").setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(offensePlays, true).build());
-  const defensePlays=["4-3 Cover 2", "3-4 Cover 3", "Man Blitz", "Zone Blitz"];
+  
+  const defensePlays=["4-3 Cover 2", "3-4 Cover 3", "Man Blitz", "Zone Blitz", "Field Goal Block"];
   sheet.getRange("B2").setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(defensePlays, true).build());
-  const stateHeaders = ["home_team_id", "away_team_id", "possession_team_id", "quarter", "game_clock_sec", "down", "distance_to_go", "ball_on_yardline"];
+  
+  // [NEW] Added home_score and away_score
+  const stateHeaders = [
+    "home_team_id", "away_team_id", "possession_team_id", "quarter", 
+    "game_clock_sec", "down", "distance_to_go", "ball_on_yardline",
+    "home_score", "away_score"
+  ];
   sheet.getRange(4, 1, 1, stateHeaders.length).setValues([stateHeaders]).setBackground("#434343").setFontColor("#FFFFFF").setFontWeight("bold");
   sheet.getRange(5, 1, 1, stateHeaders.length).setBackground("#efefef");
 }
 
 function setupGameStateSheet(ss) {
     const sheet = prepareSheet(ss, CONFIG.sheets.GAME_STATE);
-
-    // This function now ONLY sets up static headers and formatting. NO FORMULAS.
-    sheet.getRange("A1:H1").merge().setValue("🏈 SCOREBOARD & STATUS 🏈").setHorizontalAlignment("center").setFontWeight("bold");
-    sheet.getRange("B2:D2").setValues([["HOME", "SCORE", "TIMEOUTS"]]).setFontWeight("bold");
-    sheet.getRange("F2:H2").setValues([["AWAY", "SCORE", "TIMEOUTS"]]).setFontWeight("bold");
-    sheet.getRange("A5:H5").merge().setValue("📊 CURRENT DRIVE 📊").setHorizontalAlignment("center").setFontWeight("bold");
-    sheet.getRange("B6:G6").setValues([["POSSESSION", "BALL ON", "DOWN", "TO GO", "QUARTER", "GAME CLOCK"]]).setFontWeight("bold");
     
-    setupVisualField(ss, sheet);
-    
+    sheet.getRange("A1:G8").clear(); 
+    sheet.getRange("A1:G1").merge().setValue("🏈 GAME DASHBOARD 🏈").setHorizontalAlignment("center").setFontWeight("bold").setBackground(CONFIG.colors.HEADER_BG).setFontColor(CONFIG.colors.HEADER_FONT);
+    sheet.getRange("A3:C3").setValues([["HOME", "SCORE", "TIMEOUTS"]]).setFontWeight("bold");
+    sheet.getRange("A4:C4").setBackground("#e9effb");
+    sheet.getRange("E3:G3").setValues([["AWAY", "SCORE", "TIMEOUTS"]]).setFontWeight("bold");
+    sheet.getRange("E4:G4").setBackground("#fbe9e9");
+    sheet.getRange("A6:F6").setValues([["POSSESSION", "BALL ON", "DOWN", "TO GO", "QUARTER", "GAME CLOCK"]]).setFontWeight("bold");
+    sheet.getRange("A7:F7").setBackground("#efefef");
 
-    const fieldRange = sheet.getRange("B9:CW9");
-    const rules = [
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=MOD(COLUMN(B9)-1, 10)=0").setBackground("#d9ead3").setRanges([fieldRange]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=COLUMN(B9)-1=50").setBackground("#f1c232").setRanges([fieldRange]).build()
-    ];
-    sheet.setConditionalFormatRules(rules);
+    sheet.getRange("A9").setValue("📜 PLAY-BY-PLAY LOG").setFontWeight("bold");
+    sheet.getRange("A10:G10").setValues([["Clock", "Poss", "Down", "To Go", "Ball On", "Play Call", "Result"]]).setFontWeight("bold");
 
-    sheet.getRange("A11").setValue("📜 PLAY-BY-PLAY LOG").setFontWeight("bold");
-    sheet.getRange("A12:G12").setValues([["Clock", "Poss", "Down", "To Go", "Ball On", "Play Call", "Result"]]).setFontWeight("bold");
-    sheet.setFrozenRows(14);
+    sheet.setFrozenRows(10);
 }
 
-function setupVisualField(ss, sheet) { // Added 'ss' as a parameter
-    const simRef = `'${CONFIG.sheets.PLAY_SIM}'!`;
+/**
+ * [NEW] Creates the game_log sheet.
+ */
+function setupGameLogSheet(ss) {
+    const sheet = prepareSheet(ss, CONFIG.sheets.GAME_LOG);
+    sheet.setFrozenRows(1);
+    const headers = [["Game Date", "Home Team", "Home Score", "Away Team", "Away Score", "Result"]];
+    sheet.getRange("A1:F1").setValues(headers).setFontWeight("bold").setBackground(CONFIG.colors.HEADER_BG).setFontColor(CONFIG.colors.HEADER_FONT);
+    sheet.autoResizeColumns(1, headers.length);
+}
 
-    const START_COL = 11; // Column K
-    const END_ZONE_WIDTH = 10;
-    const FIELD_WIDTH = 100;
-    const TOTAL_WIDTH = END_ZONE_WIDTH * 2 + FIELD_WIDTH;
-    
-    const awayEndZone = sheet.getRange(3, START_COL, 8, END_ZONE_WIDTH);
-    const playingField = sheet.getRange(3, START_COL + END_ZONE_WIDTH, 8, FIELD_WIDTH);
-    const homeEndZone = sheet.getRange(3, START_COL + END_ZONE_WIDTH + FIELD_WIDTH, 8, END_ZONE_WIDTH);
-    
-    sheet.getRange(2, START_COL, 1, TOTAL_WIDTH).merge().setValue("FIELD OF PLAY").setHorizontalAlignment("center").setFontWeight("bold");
-    sheet.setColumnWidths(START_COL, TOTAL_WIDTH, 15);
+function setupStrategySheet(ss) {
+    const sheet = prepareSheet(ss, CONFIG.sheets.STRATEGY);
+    sheet.setFrozenRows(1);
+    sheet.getRange("A1:F1").merge().setValue("📋 TEAM STRATEGY & GAMEPLAN 📋").setHorizontalAlignment("center").setFontWeight("bold").setBackground(CONFIG.colors.HEADER_BG).setFontColor(CONFIG.colors.HEADER_FONT);
 
-    const numberMarkers = ["10", "20", "30", "40", "50", "40", "30", "20", "10"];
-    let markerColumn = START_COL + END_ZONE_WIDTH + 9; // First marker at the 10-yard line
-    numberMarkers.forEach(marker => {
-      sheet.getRange(11, markerColumn).setValue(marker).setHorizontalAlignment('center').setFontWeight('bold');
-      markerColumn += 10;
-    });
+    // --- Offensive Strategy ---
+    sheet.getRange("A3").setValue("Offensive Gameplan").setFontWeight("bold");
+    sheet.getRange("A4:B4").setValues([["Play Style:", "Balanced"]]);
+    const offStyles = ["Balanced", "Pass Heavy", "Run Heavy"];
+    const offRule = SpreadsheetApp.newDataValidation().requireValueInList(offStyles, true).build();
+    sheet.getRange("B4").setDataValidation(offRule);
 
-    const awayTeamName = ss.getSheetByName(CONFIG.sheets.TEAMS).getRange("C3").getValue().toUpperCase();
-    const homeTeamName = ss.getSheetByName(CONFIG.sheets.TEAMS).getRange("C2").getValue().toUpperCase();
-    
-    sheet.getRange(4, START_COL + 2, 6, 1).merge().setValue(awayTeamName).setFontColor("#FFFFFF").setFontWeight("bold").setTextRotation(90).setHorizontalAlignment('center').setVerticalAlignment('middle');
-    sheet.getRange(4, START_COL + END_ZONE_WIDTH + FIELD_WIDTH + 2, 6, 1).merge().setValue(homeTeamName).setFontColor("#FFFFFF").setFontWeight("bold").setTextRotation(90).setHorizontalAlignment('center').setVerticalAlignment('middle');
-    
-    const ballPosHelper = `=IF(${simRef}C5=${simRef}A5, ${simRef}H5, 100-${simRef}H5)`;
-    const fieldStartCol = START_COL + END_ZONE_WIDTH;
-    
-    const rules = [
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=TRUE").setBackground("#4F7942").setRanges([playingField]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=TRUE").setBackground(CONFIG.colors.AWAY_TEAM_BG).setRanges([awayEndZone]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=TRUE").setBackground(CONFIG.colors.HOME_TEAM_BG).setRanges([homeEndZone]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=MOD(COLUMN(R[0]C[0]) - ${fieldStartCol}, 5) = 0`).setBackground("#a2d699").setRanges([playingField]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(`=COLUMN(R[0]C[0]) - ${fieldStartCol} + 1 = (${ballPosHelper})`).setBackground(CONFIG.colors.BALL_MARKER).setRanges([playingField]).build()
-    ];
-    
-    sheet.setConditionalFormatRules(rules);
+    // --- Defensive Strategy ---
+    sheet.getRange("D3").setValue("Defensive Gameplan").setFontWeight("bold");
+    sheet.getRange("D4:E4").setValues([["Aggressiveness:", "Standard"]]);
+    const defStyles = ["Conservative", "Standard", "Aggressive (Blitz Heavy)"];
+    const defRule = SpreadsheetApp.newDataValidation().requireValueInList(defStyles, true).build();
+    sheet.getRange("E4").setDataValidation(defRule);
+
+    // --- Substitutions (Placeholder) ---
+    sheet.getRange("A6").setValue("Substitutions (Depth Chart Management)").setFontWeight("bold");
+    sheet.getRange("A7:C7").setValues([["Position", "Current Starter", "Substitute With..."]]).setFontWeight("bold");
+    sheet.getRange("A8:B10").setValues([
+      ["QB", `=IFERROR(FILTER(players!B2:B & " " & players!C2:C, players!D2:D = 1, players!F2:F="QB", players!H2:H=1), "N/A")`],
+      ["RB", `=IFERROR(FILTER(players!B2:B & " " & players!C2:C, players!D2:D = 1, players!F2:F="RB", players!H2:H=1), "N/A")`],
+      ["WR", `=IFERROR(FILTER(players!B2:B & " " & players!C2:C, players!D2:D = 1, players!F2:F="WR", players!H2:H=1), "N/A")`]
+    ]);
+
+    sheet.getRange("A4:E10").setBorder(true, true, true, true, null, null, null, SpreadsheetApp.BorderStyle.SOLID);
+    sheet.autoResizeColumns(1, 5);
 }
